@@ -26,7 +26,7 @@ def main():
     text_function = chosen_corpus + ".raw(str(input('Enter text file name (with .txt): ')))"
     text = eval(text_function)
     tokens = nltk.word_tokenize(text)
-    tagged_corpus = nltk.tag.brill.tag(tokens)
+    tagged_corpus = nltk.pos_tag(tokens)
     update_corpus = ""
 
     # variables for adjective searching loop
