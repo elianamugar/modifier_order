@@ -75,7 +75,7 @@ def main():
     # stores user's filename choice
     user_f = str(input("Enter filename for which you want the data text to be exported (with .txt): \n"))
 
-    # 
+    # writes line count and data to text file of user's filename choice
     file_open = open(user_f, "w")
     file_open.write(str(count) + " lines" + "\n" + "\n")
     file_open.write(update_corpus)
