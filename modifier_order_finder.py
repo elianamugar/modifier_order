@@ -1,111 +1,149 @@
-#requires download of nltk in python
-import os
+"""
+Find consecutive adjective sequences in NLTK corpus texts.
+
+This script searches a selected NLTK corpus text for strings of two or more
+consecutive adjectives, then exports each sequence with surrounding context.
+"""
+
+from pathlib import Path
+
 import nltk
-from nltk.corpus import *
-import string
+from nltk.corpus import brown, gutenberg, inaugural, reuters, webtext
+
+
+CORPORA = {
+    "brown": brown,
+    "gutenberg": gutenberg,
+    "inaugural": inaugural,
+    "reuters": reuters,
+    "webtext": webtext,
+}
+
+ADJECTIVE_TAGS = {"JJ", "JJR", "JJS"}
+EXCLUDED_WORDS = {"such"}
+
+
+def choose_corpus():
+    """Prompt the user to choose an available corpus."""
+    print("Available corpora:")
+    for name in CORPORA:
+        print(f"- {name}")
+
+    while True:
+        choice = input("\nChoose a corpus: ").strip().lower()
+        if choice in CORPORA:
+            return choice, CORPORA[choice]
+
+        print("Invalid corpus. Please choose one from the list.")
+
+
+def choose_file(corpus):
+    """Prompt the user to choose a file from the selected corpus."""
+    file_ids = corpus.fileids()
+
+    print("\nAvailable files:")
+    for file_id in file_ids[:25]:
+        print(f"- {file_id}")
+
+    if len(file_ids) > 25:
+        print(f"...and {len(file_ids) - 25} more")
+
+    while True:
+        choice = input("\nChoose a file ID: ").strip()
+        if choice in file_ids:
+            return choice
+
+        print("Invalid file ID. Please copy one exactly from the list.")
+
+
+def is_adjective(token_tag_pair):
+    """Return True if a tagged token is an adjective."""
+    word, tag = token_tag_pair
+    return tag in ADJECTIVE_TAGS and word.lower() not in EXCLUDED_WORDS
+
+
+def find_adjective_sequences(tagged_tokens, context_size=6):
+    """Find consecutive adjective sequences with surrounding context."""
+    sequences = []
+    index = 0
+
+    while index < len(tagged_tokens):
+        if not is_adjective(tagged_tokens[index]):
+            index += 1
+            continue
+
+        start = index
+        adjectives = []
+
+        while index < len(tagged_tokens) and is_adjective(tagged_tokens[index]):
+            adjectives.append(tagged_tokens[index][0])
+            index += 1
+
+        end = index - 1
+
+        if len(adjectives) >= 2:
+            before = tagged_tokens[max(0, start - context_size):start]
+            after = tagged_tokens[end + 1:end + 1 + context_size]
+
+            sequences.append(
+                {
+                    "adjectives": adjectives,
+                    "before": [word for word, _ in before],
+                    "after": [word for word, _ in after],
+                }
+            )
+
+    return sequences
+
+
+def format_sequence(sequence):
+    """Format one adjective sequence with context."""
+    before = " ".join(sequence["before"])
+    adjectives = " ".join(sequence["adjectives"])
+    after = " ".join(sequence["after"])
+
+    return f"{before} [{adjectives}] {after}".strip()
+
+
+def format_results(corpus_name, file_id, sequences):
+    """Format all modifier-order results."""
+    lines = [
+        "Modifier Order Analysis",
+        "=======================",
+        f"Corpus: {corpus_name}",
+        f"File: {file_id}",
+        f"Consecutive adjective sequences found: {len(sequences)}",
+        "",
+    ]
+
+    for sequence in sequences:
+        lines.append(format_sequence(sequence))
+        lines.append("")
+
+    return "\n".join(lines)
+
 
 def main():
-    # prints all corpora in NLTK
-    print("\nHere are the corpora built into nltk:")
-    for h in os.listdir(nltk.data.find("corpora")):
-        if '.zip' not in h:
-            print(h)
-    print()
+    """Run the modifier order finder."""
+    corpus_name, corpus = choose_corpus()
+    file_id = choose_file(corpus)
 
-    # stores user's corpus choice
-    chosen_corpus = input("Enter corpus name (copy the name EXACTLY as listed): ")
-    function_string = "nltk.corpus." + chosen_corpus + ".fileids()"
-
-    # shows all files within user's corpus choice
-    print("\nHere are the options from", chosen_corpus + ": \n")
-    for corpus in eval(function_string):
-        print(str(corpus))
-    print()
-
-    # tags all words with corresponding part-of-speech in user's text file choice
-    text_function = chosen_corpus + ".raw(str(input('Enter text file name (with .txt): ')))"
-    text = eval(text_function)
+    text = corpus.raw(file_id)
     tokens = nltk.word_tokenize(text)
-    tagged_corpus = nltk.pos_tag(tokens)
-    update_corpus = ""
+    tagged_tokens = nltk.pos_tag(tokens)
 
-    # variables for adjective searching loop
-    consecutive = False
-    curr_consecutive_adjs = []
-    consecutive_start = None
-    consecutive_end = None
-    punctuations = '''!()-[]}{;:'"\,<>./?@#$%^&*_~'''
-    count = 0
+    sequences = find_adjective_sequences(tagged_tokens)
 
-    # checks each word tagged in the corpus
-    for i in range(len(tagged_corpus)):
-        # begin search for minimum 2 consecutive adjectives
-        # searches for unlimited maximum consecutive adjectives
-        if 'JJ' in tagged_corpus[i] and "such" not in tagged_corpus[i]: 
-            # not looking for consecutive adjectives now, but want to start
-            if not consecutive: 
-              consecutive = True
-              consecutive_start = i
-            curr_consecutive_adjs.append(tagged_corpus[i][0])
-        # checks if the "word" is actually a punctuation
-        elif tagged_corpus[i][0] in punctuations:
-          continue
-        # reached the end of your adjectives
-        else:
-          if consecutive:
-            consecutive = False
-            consecutive_end = i - 1
-            if len(curr_consecutive_adjs) > 1:
-                count += 1
-                # prints context BEFORE consecutive adjective string
-                for j in range(consecutive_start - 6, consecutive_start):
-                    update_corpus += str(tagged_corpus[j][0]) + " "
-                update_corpus += "["
-                for x in range(len(curr_consecutive_adjs) - 1):
-                    update_corpus += curr_consecutive_adjs[x] + " "
-                update_corpus += curr_consecutive_adjs[len(curr_consecutive_adjs)-1] + "]"
-                    # prints context AFTER consecutive adjective string
-                for y in range(consecutive_end + 1, consecutive_end + 7):
-                    update_corpus += " " + str(tagged_corpus[y][0])
-                update_corpus += "\n"
-                update_corpus += "\n"
-            # clears consecutive adjectives list to prep for the new iteration
-            curr_consecutive_adjs = []
+    output_path = Path(
+        input("\nEnter output filename, e.g. modifier_order_results.txt: ").strip()
+    )
 
-    # stores user's filename choice
-    user_f = str(input("Enter filename for which you want the data text to be exported (with .txt): \n"))
+    results = format_results(corpus_name, file_id, sequences)
+    output_path.write_text(results, encoding="utf-8")
 
-    # writes line count and data to text file of user's filename choice
-    file_open = open(user_f, "w")
-    file_open.write(str(count) + " lines" + "\n" + "\n")
-    file_open.write(update_corpus)
-    file_open.close()
-    
+    print(f"\nFound {len(sequences)} adjective sequences.")
+    print(f"Saved results to {output_path}")
 
-    
 
-# user input to run, re-run, or stop the program
-while True:
-    answer = input("Run the program? (y/n): ")
-    if answer not in ('y', 'n'):
-        print("Invalid input.")
-        break
-    if answer == 'y':
-        main()
-    else:
-        print("Goodbye.")
-        break
-
-# test code
-"""
-text = "She had been a friend and companion such as few possessed: intelligent, \
-well-informed, useful, gentle, knowing all the ways of the family, \
-interested in all its concerns, and peculiarly interested in herself, \
-in every pleasure, every scheme of hers--one to whom she could speak \
-every thought as it arose, and who had such an affection for her \
-as could never find fault."
-
-tokenss = nltk.word_tokenize(text)
-tagged_text = nltk.pos_tag(tokenss)
-print(tagged_text)
-"""
+if __name__ == "__main__":
+    main()
